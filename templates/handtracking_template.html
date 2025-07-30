@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+	<title>$GODOT_PROJECT_NAME</title>
+
+	<!-- MediaPipe Scripts -->
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+
+
+
+
+
+	<style>
+		body {
+			touch-action: none;
+			margin: 0;
+			border: 0 none;
+			padding: 0;
+			text-align: center;
+			background-color: $GODOT_THEME_BG_COLOR;
+			overflow: hidden;
+		}
+
+		#canvas {
+			display: block;
+			margin: 0;
+			color: white;
+		}
+
+		#canvas:focus {
+			outline: none;
+		}
+
+		.godot {
+			font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+			color: #e0e0e0;
+			background-color: #3b3943;
+			background-image: linear-gradient(15deg, #2f1b59 0%, #3b3943 100%);
+			border: 1px solid #45434e;
+			box-shadow: 0 0 1rem 0.1rem #2f1b59;
+		}
+
+		#status {
+			position: absolute;
+			left: 0;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			/* don't consume click events - make children visible explicitly */
+			visibility: hidden;
+		}
+
+		#status-progress {
+			width: 366px;
+			height: 7px;
+			background-color: #38363A;
+			border: 1px solid #444246;
+			padding: 1px;
+			box-shadow: 0 0 2px 1px #1B1C22;
+			border-radius: 2px;
+			visibility: visible;
+		}
+
+		@media only screen and (orientation:portrait) {
+			#status-progress {
+				width: 61.8%;
+			}
+		}
+
+		#status-progress-inner {
+			height: 100%;
+			width: 0%;
+			box-sizing: border-box;
+			transition: width 0.5s linear;
+			background-color: #202020;
+			border: 1px solid #222223;
+			box-shadow: 0 0 1px 1px #27282E;
+			border-radius: 3px;
+		}
+
+		#status-indeterminate {
+			height: 42px;
+			visibility: visible;
+			position: relative;
+		}
+
+		#status-indeterminate > div {
+			width: 4.5px;
+			height: 0;
+			border-style: solid;
+			border-width: 9px 0 9px 0;
+			border-color: transparent;
+			border-left-color: #2b2b2b;
+			transform-origin: center 21px;
+			position: absolute;
+		}
+
+		#status-indeterminate > div:nth-child(1) { transform: rotate( 22.5deg); }
+		#status-indeterminate > div:nth-child(2) { transform: rotate( 67.5deg); }
+		#status-indeterminate > div:nth-child(3) { transform: rotate(112.5deg); }
+		#status-indeterminate > div:nth-child(4) { transform: rotate(157.5deg); }
+		#status-indeterminate > div:nth-child(5) { transform: rotate(202.5deg); }
+		#status-indeterminate > div:nth-child(6) { transform: rotate(247.5deg); }
+		#status-indeterminate > div:nth-child(7) { transform: rotate(292.5deg); }
+		#status-indeterminate > div:nth-child(8) { transform: rotate(337.5deg); }
+
+		#status-notice {
+			margin: 0 100px;
+			line-height: 1.3;
+			visibility: visible;
+			padding: 4px 6px;
+			visibility: visible;
+		}
+
+		/* Hand Tracking Overlay Styles */
+		#hand-tracking-overlay {
+			position: absolute;
+			top: 20px;
+			right: 20px;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 15px;
+			border-radius: 10px;
+			border: 2px solid #444;
+			z-index: 1000;
+			min-width: 250px;
+			font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+			font-size: 12px;
+			color: white;
+			display: none;
+		}
+
+		#hand-tracking-overlay.visible {
+			display: block;
+		}
+
+		#hand-tracking-video {
+			position: absolute;
+			top: 20px;
+			left: 20px;
+			width: 320px;
+			height: 240px;
+			border: 2px solid #666;
+			border-radius: 8px;
+			transform: scaleX(-1);
+			z-index: 999;
+			display: none;
+			object-fit: cover;
+		}
+
+		#hand-tracking-canvas {
+			position: absolute;
+			top: 20px;
+			left: 20px;
+			width: 320px;
+			height: 240px;
+			border: 2px solid #666;
+			border-radius: 8px;
+			transform: scaleX(-1);
+			z-index: 1000;
+			display: none;
+		}
+
+		.hand-controls button {
+			background: #3b82f6;
+			color: white;
+			border: none;
+			padding: 8px 12px;
+			border-radius: 5px;
+			cursor: pointer;
+			margin: 2px;
+			font-size: 11px;
+		}
+
+		.hand-controls button:hover {
+			background: #2563eb;
+		}
+
+		.hand-controls button:disabled {
+			background: #6b7280;
+			cursor: not-allowed;
+		}
+
+		.status-indicator {
+			display: inline-block;
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			margin-right: 8px;
+			background: #ef4444;
+			transition: background-color 0.3s;
+		}
+
+		.status-indicator.active {
+			background: #22c55e;
+		}
+
+		#input-mode-display {
+			position: absolute;
+			bottom: 20px;
+			left: 20px;
+			background: rgba(0, 0, 0, 0.7);
+			padding: 10px 15px;
+			border-radius: 8px;
+			border: 1px solid #444;
+			font-size: 14px;
+			color: white;
+			z-index: 999;
+			display: none;
+		}
+
+		#input-mode-display.visible {
+			display: block;
+		}
+	</style>
+
+	<link id="-gd-engine-icon" rel="icon" type="image/png" href="$GODOT_FAVICON" />
+	<link rel="apple-touch-icon" href="$GODOT_APPLE_TOUCH_ICON"/>
+</head>
+<body>
+	<canvas id="canvas">
+		HTML5 canvas appears to be unsupported in the current browser.<br />
+		Please try updating or use a different browser.
+	</canvas>
+
+	<!-- Hand Tracking Elements -->
+	<video id="hand-tracking-video" autoplay muted playsinline></video>
+	<canvas id="hand-tracking-canvas" width="320" height="240"></canvas>
+
+	<!-- Hand Tracking Control Panel -->
+	<div id="hand-tracking-overlay">
+		<div class="hand-controls">
+			<button id="start-hand-tracking">Start Hand Tracking</button>
+			<button id="stop-hand-tracking" disabled>Stop</button>
+			<button id="toggle-video">Show Video</button>
+		</div>
+		<div style="margin-top: 10px;">
+			<span class="status-indicator" id="hand-indicator"></span>
+			<span id="tracking-status">Hand tracking disabled</span>
+		</div>
+		<div id="hand-position" style="font-family: monospace; font-size: 10px; color: #ccc; margin-top: 5px;">
+			Position: Not detected
+		</div>
+	</div>
+
+	<!-- Input Mode Display -->
+	<div id="input-mode-display">
+		Input Mode: <span id="current-input-mode">Mouse</span>
+	</div>
+
+	<div id="status">
+		<div id="status-progress" style="display: none;" oncontextmenu="event.preventDefault();"><div id ="status-progress-inner"></div></div>
+		<div id="status-indeterminate" style="display: none;" oncontextmenu="event.preventDefault();">
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+		</div>
+		<div id="status-notice" class="godot" style="display: none;"></div>
+	</div>
+
+	<script src="$GODOT_URL"></script>
+	<script>
+		// MediaPipe Hand Tracking System for Godot Custom Template
+		class GodotHandTracker {
+			constructor() {
+				this.hands = null;
+				this.camera = null;
+				this.isInitialized = false;
+				this.isTracking = false;
+				this.lastHandDataTime = 0;
+				this.handDataTimeout = 500;
+				this.videoVisible = false;
+				this.currentHandData = null;
+
+				// Get elements
+				this.videoElement = document.getElementById('hand-tracking-video');
+				this.canvasElement = document.getElementById('hand-tracking-canvas');
+				this.canvasCtx = this.canvasElement.getContext('2d');
+				this.overlay = document.getElementById('hand-tracking-overlay');
+				this.inputModeDisplay = document.getElementById('input-mode-display');
+
+				// Controls
+				this.startBtn = document.getElementById('start-hand-tracking');
+				this.stopBtn = document.getElementById('stop-hand-tracking');
+				this.toggleVideoBtn = document.getElementById('toggle-video');
+				this.handIndicator = document.getElementById('hand-indicator');
+				this.trackingStatus = document.getElementById('tracking-status');
+				this.handPosition = document.getElementById('hand-position');
+				this.currentInputMode = document.getElementById('current-input-mode');
+
+				this.setupEventListeners();
+				this.initializeMediaPipe();
+			}
+
+			setupEventListeners() {
+				this.startBtn.addEventListener('click', () => this.startTracking());
+				this.stopBtn.addEventListener('click', () => this.stopTracking());
+				this.toggleVideoBtn.addEventListener('click', () => this.toggleVideo());
+			}
+
+			async initializeMediaPipe() {
+				try {
+					// Wait for MediaPipe to load
+					await this.waitForMediaPipe();
+
+					this.hands = new Hands({
+						locateFile: (file) => {
+							return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+						}
+					});
+
+					this.hands.setOptions({
+						maxNumHands: 1,
+						modelComplexity: 1,
+						minDetectionConfidence: 0.6,
+						minTrackingConfidence: 0.5
+					});
+
+					this.hands.onResults((results) => this.onResults(results));
+
+					this.isInitialized = true;
+					this.trackingStatus.textContent = 'Ready to start';
+					console.log('MediaPipe Hand Tracking initialized for Godot');
+
+				} catch (error) {
+					console.error('Error initializing MediaPipe:', error);
+					this.trackingStatus.textContent = 'Initialization failed';
+				}
+			}
+
+			async waitForMediaPipe() {
+				return new Promise((resolve, reject) => {
+					let attempts = 0;
+					const maxAttempts = 50;
+
+					const checkMediaPipe = () => {
+						attempts++;
+						if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
+							resolve();
+						} else if (attempts >= maxAttempts) {
+							reject(new Error('MediaPipe libraries failed to load'));
+						} else {
+							setTimeout(checkMediaPipe, 100);
+						}
+					};
+
+					checkMediaPipe();
+				});
+			}
+
+			async startTracking() {
+				if (!this.isInitialized) return;
+
+				try {
+					const stream = await navigator.mediaDevices.getUserMedia({
+						video: {
+							width: { exact: 640 },
+							height: { exact: 480 },
+							facingMode: 'user'
+						}
+					});
+
+					this.videoElement.srcObject = stream;
+					await this.videoElement.play();
+
+					// Wait for video to be ready
+					await new Promise((resolve) => {
+						this.videoElement.onloadedmetadata = resolve;
+						setTimeout(resolve, 1000); // Fallback timeout
+					});
+
+					this.camera = new Camera(this.videoElement, {
+						onFrame: async () => {
+							if (this.hands && this.videoElement.readyState >= 2) {
+								await this.hands.send({ image: this.videoElement });
+							}
+						},
+						width: 640,
+						height: 480
+					});
+
+					this.camera.start();
+					this.isTracking = true;
+
+					this.startBtn.disabled = true;
+					this.stopBtn.disabled = false;
+					this.toggleVideoBtn.disabled = false;
+					this.trackingStatus.textContent = 'Tracking active';
+
+				} catch (error) {
+					console.error('Error starting camera:', error);
+					this.trackingStatus.textContent = 'Camera error';
+				}
+			}
+
+			stopTracking() {
+				if (this.camera) this.camera.stop();
+				if (this.videoElement.srcObject) {
+					this.videoElement.srcObject.getTracks().forEach(track => track.stop());
+					this.videoElement.srcObject = null;
+				}
+
+				this.isTracking = false;
+				this.currentHandData = null;
+				this.lastHandDataTime = 0;
+
+				this.startBtn.disabled = false;
+				this.stopBtn.disabled = true;
+				this.toggleVideoBtn.disabled = true;
+
+				this.handIndicator.classList.remove('active');
+				this.trackingStatus.textContent = 'Stopped';
+				this.handPosition.textContent = 'Position: Not detected';
+
+				this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+			}
+
+			toggleVideo() {
+				this.videoVisible = !this.videoVisible;
+				this.videoElement.style.display = this.videoVisible ? 'block' : 'none';
+				this.canvasElement.style.display = this.videoVisible ? 'block' : 'none';
+				this.toggleVideoBtn.textContent = this.videoVisible ? 'Hide Video' : 'Show Video';
+			}
+
+			onResults(results) {
+				this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+
+				if (this.videoVisible) {
+					this.canvasCtx.save();
+					this.canvasCtx.scale(-1, 1);
+					this.canvasCtx.translate(-this.canvasElement.width, 0);
+					this.canvasCtx.drawImage(results.image, 0, 0, this.canvasElement.width, this.canvasElement.height);
+					this.canvasCtx.restore();
+				}
+
+				if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+					const landmarks = results.multiHandLandmarks[0];
+					const indexTip = landmarks[8];
+					const mirroredX = 1.0 - indexTip.x;
+
+					this.currentHandData = {
+						x: mirroredX,
+						y: indexTip.y,
+						z: indexTip.z,
+						timestamp: Date.now(),
+						landmarks: landmarks
+					};
+
+					this.lastHandDataTime = Date.now();
+
+					this.handIndicator.classList.add('active');
+					this.trackingStatus.textContent = 'Hand detected';
+					this.handPosition.textContent = `Position: (${mirroredX.toFixed(3)}, ${indexTip.y.toFixed(3)})`;
+
+					if (this.videoVisible) {
+						const x = indexTip.x * this.canvasElement.width;
+						const y = indexTip.y * this.canvasElement.height;
+						this.canvasCtx.fillStyle = '#00FF00';
+						this.canvasCtx.beginPath();
+						this.canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
+						this.canvasCtx.fill();
+					}
+				} else {
+					this.currentHandData = null;
+					this.handIndicator.classList.remove('active');
+					this.trackingStatus.textContent = 'No hand detected';
+					this.handPosition.textContent = 'Position: Not detected';
+				}
+			}
+
+			getHandDataForGodot() {
+				if (!this.isInitialized || !this.isTracking) return null;
+
+				const now = Date.now();
+				const timeSinceLastData = now - this.lastHandDataTime;
+
+				if (timeSinceLastData > this.handDataTimeout) return null;
+
+				return this.currentHandData;
+			}
+
+			getInputStatusForGodot() {
+				return {
+					handTrackingInitialized: this.isInitialized,
+					isTracking: this.isTracking,
+					timeSinceLastHandData: Date.now() - this.lastHandDataTime,
+					hasRecentHandData: (Date.now() - this.lastHandDataTime) < this.handDataTimeout
+				};
+			}
+
+			showOverlay() {
+				this.overlay.classList.add('visible');
+				this.inputModeDisplay.classList.add('visible');
+			}
+
+			updateInputMode(mode) {
+				this.currentInputMode.textContent = mode;
+			}
+		}
+
+		// Initialize hand tracker
+		var handTracker;
+
+		// Godot-compatible function declarations (MUST use 'var' for Godot compatibility)
+		var getHandData = function() {
+			return handTracker ? handTracker.getHandDataForGodot() : null;
+		};
+
+		var getInputStatus = function() {
+			return handTracker ? handTracker.getInputStatusForGodot() : null;
+		};
+
+		var startHandTracking = function() {
+			if (handTracker) handTracker.startTracking();
+		};
+
+		var stopHandTracking = function() {
+			if (handTracker) handTracker.stopTracking();
+		};
+
+		var isHandTrackingActive = function() {
+			return handTracker ? handTracker.isTracking : false;
+		};
+
+		var updateInputModeDisplay = function(mode) {
+			if (handTracker) handTracker.updateInputMode(mode);
+		};
+
+		var testGodotConnection = function() {
+			return {
+				handTrackerExists: !!handTracker,
+				isTracking: handTracker ? handTracker.isTracking : false,
+				hasHandData: handTracker ? !!handTracker.currentHandData : false,
+				handData: handTracker ? handTracker.currentHandData : null,
+				functionsAvailable: {
+					getHandData: typeof getHandData === 'function',
+					getInputStatus: typeof getInputStatus === 'function',
+					startHandTracking: typeof startHandTracking === 'function'
+				}
+			};
+		};
+
+		// Also assign to window for debugging
+		window.getHandData = getHandData;
+		window.getInputStatus = getInputStatus;
+		window.startHandTracking = startHandTracking;
+		window.stopHandTracking = stopHandTracking;
+		window.isHandTrackingActive = isHandTrackingActive;
+		window.updateInputModeDisplay = updateInputModeDisplay;
+		window.testGodotConnection = testGodotConnection;
+
+		// Godot Engine Configuration
+		const GODOT_CONFIG = $GODOT_CONFIG;
+		const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+		const engine = new Engine(GODOT_CONFIG);
+
+		(function () {
+			const statusOverlay = document.getElementById('status');
+			const statusProgress = document.getElementById('status-progress');
+			const statusProgressInner = document.getElementById('status-progress-inner');
+			const statusIndeterminate = document.getElementById('status-indeterminate');
+			const statusNotice = document.getElementById('status-notice');
+
+			let initializing = true;
+			let statusMode = '';
+
+			function setStatusMode(mode) {
+				if (statusMode === mode || !initializing) return;
+
+				[statusProgress, statusIndeterminate, statusNotice].forEach(elem => {
+					elem.style.display = 'none';
+				});
+
+				if (mode === 'hidden') {
+					statusOverlay.remove();
+					initializing = false;
+
+					// Initialize hand tracking after Godot loads
+					handTracker = new GodotHandTracker();
+
+					// Show hand tracking overlay
+					setTimeout(() => {
+						if (handTracker) handTracker.showOverlay();
+					}, 1000);
+
+					console.log('Godot loaded - Hand tracking system initialized');
+					return;
+				}
+
+				statusOverlay.style.visibility = 'visible';
+
+				if (mode === 'progress') statusProgress.style.display = 'block';
+				else if (mode === 'indeterminate') statusIndeterminate.style.display = 'block';
+				else if (mode === 'notice') statusNotice.style.display = 'block';
+
+				statusMode = mode;
+			}
+
+			function setStatusNotice(text) {
+				while (statusNotice.lastChild) {
+					statusNotice.removeChild(statusNotice.lastChild);
+				}
+				const lines = text.split('\n');
+				lines.forEach((line, index) => {
+					statusNotice.appendChild(document.createTextNode(line));
+					if (index < lines.length - 1) {
+						statusNotice.appendChild(document.createElement('br'));
+					}
+				});
+			}
+
+			function displayFailureNotice(err) {
+				console.error(err);
+				setStatusNotice(err instanceof Error ? err.message : err);
+				setStatusMode('notice');
+				initializing = false;
+			}
+
+			const missing = Engine.getMissingFeatures({
+				threads: GODOT_THREADS_ENABLED,
+			});
+
+			if (missing.length !== 0) {
+				const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+				displayFailureNotice(missingMsg + missing.join('\n'));
+			} else {
+				setStatusMode('indeterminate');
+
+				engine.startGame({
+					'onProgress': function (current, total) {
+						if (total > 0) {
+							statusProgressInner.style.width = current / total * 100 + '%';
+							setStatusMode('progress');
+							if (current === total) {
+								// wait for progress bar animation
+								setTimeout(() => {
+									setStatusMode('indeterminate');
+								}, 500);
+							}
+						} else {
+							setStatusMode('indeterminate');
+						}
+					},
+				}).then(() => {
+					setStatusMode('hidden');
+				}, displayFailureNotice);
+			}
+		}());
+
+		// Log that everything is ready
+		console.log('Godot Custom Template with MediaPipe Hand Tracking initialized');
+		console.log('Available functions for Godot:', {
+			getHandData: typeof getHandData,
+			getInputStatus: typeof getInputStatus,
+			startHandTracking: typeof startHandTracking,
+			stopHandTracking: typeof stopHandTracking,
+			isHandTrackingActive: typeof isHandTrackingActive,
+			testGodotConnection: typeof testGodotConnection
+		});
+
+
+		var testFunction = function() {
+			console.log('testFunction called by Godot!');
+			return "hello from javascript";
+		};
+
+		var getSimpleNumber = function() {
+			return 42;
+		};
+
+		console.log('Simple functions declared');
+		console.log('testFunction type:', typeof testFunction);
+
+	</script>
+
+
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://bf33rd7uc2ygo"]
+
+[ext_resource type="Script" uid="uid://bn06yl0lkxplw" path="res://scenes/slice_trail/slice_trail.gd" id="1_p7ftu"]
+
+[node name="SliceTrail" type="Line2D"]
+script = ExtResource("1_p7ftu")
+trail_style = 3

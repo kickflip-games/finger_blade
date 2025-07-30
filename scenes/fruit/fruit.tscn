@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3 uid="uid://b4aipg6cdyw3p"]
+
+[ext_resource type="Script" uid="uid://nkaf3wnxsq8c" path="res://scenes/fruit/fruit.gd" id="1_8dwgx"]
+[ext_resource type="Texture2D" uid="uid://ds7pwd4hb858h" path="res://scenes/fruit/blue_body_circle.png" id="2_luid3"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_luid3"]
+radius = 41.0
+
+[node name="Fruit" type="RigidBody2D"]
+mass = 0.5
+gravity_scale = 0.2
+script = ExtResource("1_8dwgx")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_luid3")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_luid3")
